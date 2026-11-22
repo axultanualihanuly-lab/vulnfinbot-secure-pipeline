@@ -62,6 +62,26 @@ jobs:
             --output /reports/trivy-report.json \
             vulnfinbot:latest
 
+      - name: Start application container
+        run: |
+          docker run -d --name vulnfinbot -p 5000:5000 vulnfinbot:latest
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:5000/health && break
+            sleep 2
+          done
+
+      - name: OWASP ZAP baseline scan (DAST)
+        continue-on-error: true
+        run: |
+          chmod 777 reports
+          docker run --rm --network host \
+            -v "$PWD/reports:/zap/wrk/:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://localhost:5000 -J zap-report.json
+
+      - name: Stop application container
+        if: always()
+        run: docker rm -f vulnfinbot || true
       - name: Upload security reports
         if: always()
         uses: actions/upload-artifact@v4
